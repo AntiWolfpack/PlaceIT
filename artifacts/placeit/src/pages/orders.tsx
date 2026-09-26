@@ -1,0 +1,12 @@
+import { Link } from 'wouter';
+import { ArrowRight, ClipboardList, MapPin } from 'lucide-react';
+import { readReceiptIds } from '@/lib/placeit';
+import { useEffect, useState } from 'react';
+
+export default function Orders() {
+  const [ids, setIds] = useState<string[]>([]);
+  useEffect(() => setIds(readReceiptIds()), []);
+  return <div className="mx-auto max-w-5xl px-5 pb-24 pt-10 lg:px-8"><p className="font-mono-app text-[10px] uppercase tracking-[.2em] text-primary">Your collection history</p><h1 className="mt-2 font-display text-4xl font-bold tracking-tight">My orders</h1><p className="mt-3 max-w-xl text-sm leading-6 text-muted-foreground">Your receipts are kept on this device. Open an order to see its live status and collection details.</p>
+    {ids.length === 0 ? <div className="mt-10 rounded-3xl border border-dashed border-border bg-card px-6 py-16 text-center"><div className="mx-auto grid size-14 place-items-center rounded-2xl bg-accent"><ClipboardList size={24} /></div><h2 className="mt-5 font-display text-2xl font-bold">No collection orders yet.</h2><p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-muted-foreground">When you place an order, its private receipt will live here on this device.</p><Link href="/" data-testid="link-orders-empty-discover" className="mt-6 inline-flex rounded-full bg-primary px-5 py-3 text-sm font-bold text-primary-foreground">Discover local food</Link></div> : <div className="mt-8 space-y-3">{ids.map((id) => <Link href={`/orders/${id}`} key={id} data-testid={`link-order-${id}`} className="flex items-center justify-between gap-4 rounded-2xl border border-border bg-card p-5 transition hover:-translate-y-0.5 hover:border-primary/50"><div className="flex items-start gap-3"><div className="grid size-10 place-items-center rounded-xl bg-muted text-primary"><MapPin size={18} /></div><div><p className="font-bold">Collection order</p><p className="mt-1 font-mono-app text-[10px] uppercase tracking-wider text-muted-foreground">Receipt {id.slice(0, 8)} · saved locally</p><p className="mt-2 text-xs text-muted-foreground">Open to see the live receipt</p></div></div><ArrowRight size={18} className="text-primary" /></Link>)}</div>}
+  </div>;
+}

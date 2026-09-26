@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "PlaceIT"
+description = "A mobile-first South African food marketplace for discovering independent local vendors, ordering from one store at a time, and collecting food in person."
+version = "1.0.0"
+id = "artifacts/placeit"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 22773
+
+[services.development]
+run = "pnpm --filter @workspace/placeit run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/placeit", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/placeit/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "22773"
+BASE_PATH = "/"

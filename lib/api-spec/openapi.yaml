@@ -3,13 +3,17 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: PlaceIT South African food marketplace API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: marketplace
+    description: South African food vendors and menus
+  - name: orders
+    description: Single-vendor collection orders
 paths:
   /healthz:
     get:
@@ -24,6 +28,104 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /vendors:
+    get:
+      operationId: listVendors
+      tags: [marketplace]
+      summary: Browse local food vendors
+      parameters:
+        - name: search
+          in: query
+          description: Search vendor names, descriptions, categories, and locations
+          schema:
+            type: string
+        - name: category
+          in: query
+          schema:
+            type: string
+        - name: openNow
+          in: query
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: Matching South African food vendors
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Vendor"
+  /vendors/{vendorId}:
+    get:
+      operationId: getVendor
+      tags: [marketplace]
+      summary: View a vendor and its available menu
+      parameters:
+        - name: vendorId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Vendor profile and menu
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VendorDetail"
+        "404":
+          description: Vendor not found
+  /orders:
+    post:
+      operationId: createOrder
+      tags: [orders]
+      summary: Place a collection order with one vendor
+      description: >
+        The server verifies every menu item belongs to the selected vendor and
+        calculates all amounts in integer cents. The 15% booking fee is collected
+        online; the balance is paid directly to the vendor at collection.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrderInput"
+      responses:
+        "201":
+          description: Order created with its booking-fee payment state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderReceipt"
+        "400":
+          description: Invalid order, unavailable menu item, or mixed vendor items
+        "404":
+          description: Vendor or menu item not found
+        "409":
+          description: Vendor closed or item no longer available
+  /orders/{orderId}:
+    get:
+      operationId: getOrder
+      tags: [orders]
+      summary: Track an order using its private receipt ID
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Current collection order and payment status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderReceipt"
+        "404":
+          description: Order not found
 components:
   schemas:
     HealthStatus:
@@ -33,4 +135,141 @@ components:
           type: string
       required:
         - status
+    Vendor:
+      type: object
+      required:
+        - id
+        - name
+        - description
+        - category
+        - neighborhood
+        - city
+        - province
+        - pickupAddress
+        - rating
+        - ratingCount
+        - pickupEtaMinutes
+        - heroImageUrl
+        - isOpen
+        - isFeatured
+        - menuItemCount
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string }
+        category: { type: string }
+        neighborhood: { type: string }
+        city: { type: string }
+        province: { type: string }
+        pickupAddress: { type: string }
+        rating: { type: number }
+        ratingCount: { type: integer }
+        pickupEtaMinutes: { type: integer }
+        heroImageUrl: { type: ["string", "null"], format: uri }
+        isOpen: { type: boolean }
+        isFeatured: { type: boolean }
+        menuItemCount: { type: integer }
+    MenuItem:
+      type: object
+      required:
+        - id
+        - vendorId
+        - name
+        - description
+        - category
+        - priceCents
+        - imageUrl
+        - isAvailable
+        - isPopular
+      properties:
+        id: { type: string, format: uuid }
+        vendorId: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string }
+        category: { type: string }
+        priceCents: { type: integer, minimum: 0 }
+        imageUrl: { type: ["string", "null"], format: uri }
+        isAvailable: { type: boolean }
+        isPopular: { type: boolean }
+    VendorDetail:
+      type: object
+      required: [vendor, menuItems]
+      properties:
+        vendor:
+          $ref: "#/components/schemas/Vendor"
+        menuItems:
+          type: array
+          items:
+            $ref: "#/components/schemas/MenuItem"
+    OrderLineInput:
+      type: object
+      required: [productId, quantity]
+      properties:
+        productId: { type: string, format: uuid }
+        quantity: { type: integer, minimum: 1, maximum: 20 }
+    OrderInput:
+      type: object
+      required: [vendorId, customerName, customerPhone, items]
+      properties:
+        vendorId: { type: string, format: uuid }
+        customerName: { type: string, minLength: 2, maxLength: 100 }
+        customerPhone:
+          type: string
+          pattern: "^(\\+27|0)[6-8][0-9]{8}$"
+        collectionNote: { type: string, maxLength: 240 }
+        items:
+          type: array
+          minItems: 1
+          maxItems: 30
+          items:
+            $ref: "#/components/schemas/OrderLineInput"
+    OrderLine:
+      type: object
+      required: [productId, productName, quantity, unitPriceCents, lineTotalCents]
+      properties:
+        productId: { type: string, format: uuid }
+        productName: { type: string }
+        quantity: { type: integer }
+        unitPriceCents: { type: integer }
+        lineTotalCents: { type: integer }
+    OrderReceipt:
+      type: object
+      required:
+        - id
+        - vendorId
+        - vendorName
+        - pickupAddress
+        - customerName
+        - items
+        - orderTotalCents
+        - bookingFeeCents
+        - commissionRateBps
+        - commissionAmountCents
+        - dueAtCollectionCents
+        - paymentStatus
+        - orderStatus
+        - createdAt
+      properties:
+        id: { type: string, format: uuid }
+        vendorId: { type: string, format: uuid }
+        vendorName: { type: string }
+        pickupAddress: { type: string }
+        customerName: { type: string }
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrderLine"
+        orderTotalCents: { type: integer }
+        bookingFeeCents: { type: integer }
+        commissionRateBps: { type: integer, enum: [1500] }
+        commissionAmountCents: { type: integer }
+        dueAtCollectionCents: { type: integer }
+        paymentStatus:
+          type: string
+          enum: [pending, paid, failed]
+        orderStatus:
+          type: string
+          enum: [awaiting_payment, placed, preparing, ready, collected, cancelled]
+        checkoutUrl: { type: ["string", "null"], format: uri }
+        createdAt: { type: string, format: date-time }
 
