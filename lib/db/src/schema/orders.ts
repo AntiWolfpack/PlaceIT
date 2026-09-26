@@ -19,7 +19,10 @@ export const ordersTable = pgTable("orders", {
     dueAtCollectionCents: integer("due_at_collection_cents").notNull(),
     paymentStatus: text("payment_status").notNull().default("pending"),
     orderStatus: text("order_status").notNull().default("awaiting_payment"),
+    // Kept for compatibility with any earlier pending Stripe records.
     stripeCheckoutSessionId: text("stripe_checkout_session_id"),
+    payfastPaymentId: text("payfast_payment_id"),
+    payfastTransactionId: text("payfast_transaction_id"),
     checkoutUrl: text("checkout_url"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

@@ -84,8 +84,8 @@ paths:
       summary: Place a collection order with one vendor
       description: >
         The server verifies every menu item belongs to the selected vendor and
-        calculates all amounts in integer cents. The 15% booking fee is collected
-        online; the balance is paid directly to the vendor at collection.
+        calculates all amounts in integer cents. PayFast collects the full order
+        total online and splits 15% to PlaceIT and 85% to the vendor.
       requestBody:
         required: true
         content:
@@ -94,7 +94,7 @@ paths:
               $ref: "#/components/schemas/OrderInput"
       responses:
         "201":
-          description: Order created with its booking-fee payment state
+          description: Order created with its PayFast payment state
           content:
             application/json:
               schema:
@@ -245,7 +245,7 @@ components:
         - bookingFeeCents
         - commissionRateBps
         - commissionAmountCents
-        - dueAtCollectionCents
+         - dueAtCollectionCents
         - paymentStatus
         - orderStatus
         - createdAt
@@ -260,16 +260,23 @@ components:
           items:
             $ref: "#/components/schemas/OrderLine"
         orderTotalCents: { type: integer }
-        bookingFeeCents: { type: integer }
+        bookingFeeCents:
+          type: integer
+          description: PlaceIT's 15% commission amount, retained for API compatibility.
         commissionRateBps: { type: integer, enum: [1500] }
         commissionAmountCents: { type: integer }
-        dueAtCollectionCents: { type: integer }
+        dueAtCollectionCents:
+          type: integer
+          description: Always zero when PayFast full-payment split is active.
         paymentStatus:
           type: string
           enum: [pending, paid, failed]
         orderStatus:
           type: string
           enum: [awaiting_payment, placed, preparing, ready, collected, cancelled]
-        checkoutUrl: { type: ["string", "null"], format: uri }
+        checkoutUrl:
+          type: ["string", "null"]
+          format: uri
+          description: PayFast checkout redirect URL, when payment configuration is complete.
         createdAt: { type: string, format: date-time }
 

@@ -15,6 +15,7 @@ export const vendorsTable = pgTable("vendors", {
   ratingCount: integer("rating_count").notNull().default(0),
   pickupEtaMinutes: integer("pickup_eta_minutes").notNull().default(25),
   heroImageUrl: text("hero_image_url"),
+  payfastMerchantId: text("payfast_merchant_id"),
   isOpen: boolean("is_open").notNull().default(true),
   isFeatured: boolean("is_featured").notNull().default(false),
 });

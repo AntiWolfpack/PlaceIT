@@ -28,7 +28,7 @@ export const statusLabel = (status: OrderReceipt['orderStatus']) =>
   })[status] ?? status;
 
 export const paymentLabel = (status: OrderReceipt['paymentStatus']) =>
-  ({ pending: 'Payment pending', paid: 'Booking fee paid', failed: 'Payment failed' })[status] ?? status;
+  ({ pending: 'PayFast payment pending', paid: 'Paid via PayFast', failed: 'PayFast payment failed' })[status] ?? status;
 
 export const imageFallback = (seed: string) => {
   const palettes = [
