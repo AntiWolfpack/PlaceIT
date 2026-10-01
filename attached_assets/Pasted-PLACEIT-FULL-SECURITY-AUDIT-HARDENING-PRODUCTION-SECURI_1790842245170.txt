@@ -1,0 +1,1274 @@
+PLACEIT — FULL SECURITY AUDIT, HARDENING & PRODUCTION SECURITY GATE
+
+You are working on the existing PlaceIT application.
+
+IMPORTANT:
+Do not rebuild the application from scratch.
+Do not replace the existing architecture unnecessarily.
+Do not remove working functionality.
+
+Your task is to perform a comprehensive security audit of the EXISTING PlaceIT codebase, identify vulnerabilities and insecure implementation patterns, fix them, add missing security controls, test the changes, and produce a final security audit report.
+
+The application must NOT be considered production-ready until all applicable security requirements in this prompt have been implemented and tested.
+
+==================================================
+1. CURRENT PLACEIT ARCHITECTURE
+==================================================
+
+PlaceIT is a South African local food marketplace.
+
+Current architecture:
+
+MONOREPO:
+- pnpm
+- TypeScript
+- separate frontend and backend applications
+- shared packages
+
+FRONTEND:
+artifacts/placeit
+
+Technology:
+- React
+- TypeScript
+- Vite
+- Wouter for routing
+- TanStack Query for API data
+- responsive web application
+- browser localStorage currently stores cart information and the customer's receipt ID list
+
+Frontend pages/features include:
+- discovery
+- kitchens
+- checkout
+- orders
+- receipts
+- profile
+
+BACKEND:
+artifacts/api-server
+
+Technology:
+- Express 5
+- TypeScript
+- REST API mounted under /api
+- Zod request validation
+- Drizzle ORM
+- Node pg driver
+- routes separated into marketplace, orders/Payfast, and health checks
+
+SHARED CODE:
+lib/
+- api-spec
+- api-zod
+- api-client-react
+- db
+
+DATABASE:
+- PostgreSQL
+- DATABASE_URL
+- Drizzle ORM
+- Node pg driver
+
+Current database includes tables for:
+- kitchens/vendors
+- menu items
+- orders
+
+AUTHENTICATION:
+- AWS Cognito
+
+PAYMENT PROVIDER:
+- Payfast
+
+Do NOT introduce Yoco as the active payment provider.
+The older PlaceIT security specification referenced Yoco, but the current implementation direction is Payfast.
+
+==================================================
+2. PRIMARY SECURITY PRINCIPLE
+==================================================
+
+NEVER TRUST THE CLIENT.
+
+The frontend is an untrusted client.
+
+The server must independently determine and validate:
+
+- authenticated user
+- user role
+- vendor/kitchen ownership
+- menu item ownership
+- prices
+- quantities
+- order totals
+- commission
+- payment amount
+- payment status
+- vendor receiving the payment
+- order status
+- permissions
+- administrative privileges
+
+Never rely on values supplied by React/localStorage/request bodies for security-sensitive decisions.
+
+Client-provided IDs must always be validated against server-side database records and authorization rules.
+
+==================================================
+3. MARKETPLACE PAYMENT SECURITY
+==================================================
+
+PlaceIT is a multi-kitchen marketplace.
+
+CRITICAL BUSINESS RULE:
+
+ONE ORDER = ONE KITCHEN = ONE PAYMENT RELATIONSHIP
+
+An order must belong to exactly one kitchen/vendor.
+
+An order must NEVER contain menu items from multiple kitchens.
+
+The server must enforce this.
+
+Example:
+
+Customer purchases from Kitchen A.
+
+The order must contain:
+
+vendor_id = Kitchen A
+
+All OrderItems must belong to Kitchen A.
+
+The customer must not be able to manipulate the request and change vendor_id after checkout.
+
+If the customer wants food from Kitchen B, they must create a separate order.
+
+--------------------------------------------------
+PAYFAST
+--------------------------------------------------
+
+PlaceIT uses Payfast.
+
+The intended marketplace architecture is:
+
+Customer
+    ↓
+PlaceIT checkout
+    ↓
+Payfast
+    ↓
+Split payment
+    ├── Kitchen/vendor's share
+    └── PlaceIT commission
+
+The current implementation should prepare for Payfast Split Payments but MUST NOT fake or simulate settlement.
+
+Do not invent Payfast API behavior.
+
+Do not assume that adding a vendor's Merchant ID automatically causes settlement.
+
+Use Payfast's documented integration mechanisms.
+
+The payment architecture must support:
+
+- PlaceIT primary merchant account
+- individual vendor/kitchen Payfast merchant accounts
+- vendor-specific Payfast Merchant IDs
+- PlaceIT commission
+- vendor settlement
+- payment status
+- webhook/ITN verification
+- idempotency
+- refunds where supported
+- payment audit records
+
+Every vendor must eventually have a verified Payfast Merchant ID before that vendor is permitted to accept online marketplace orders.
+
+Do NOT allow the frontend to supply or override the destination Payfast Merchant ID.
+
+The backend must derive the vendor from:
+
+Order → Kitchen/Vendor → verified Payfast Merchant ID
+
+Never:
+
+Request → client-supplied Payfast Merchant ID
+
+--------------------------------------------------
+PAYMENT INTEGRITY
+--------------------------------------------------
+
+The server must calculate:
+
+- item price
+- item subtotal
+- order subtotal
+- commission
+- vendor amount
+- payment amount
+
+Use integer cents for money calculations.
+
+Do not use floating-point arithmetic for monetary values.
+
+Example:
+
+R100.00 = 10000 cents
+
+15% commission:
+
+10000 × 0.15 = 1500 cents
+
+Vendor amount:
+
+8500 cents
+
+All calculations must happen server-side.
+
+The client may display calculated values, but the server is authoritative.
+
+A malicious customer must not be able to modify:
+
+- price
+- commission
+- vendor amount
+- order total
+- payment amount
+- vendor ID
+- payment status
+
+by editing browser requests, localStorage, JavaScript, or API payloads.
+
+==================================================
+4. PAYFAST CREDENTIAL SECURITY
+==================================================
+
+The following must NEVER appear in frontend code:
+
+- PAYFAST_MERCHANT
+- PAYFAST_MERCHANT_KEY
+- PAYFAST_PASSPHRASE
+- Payfast private credentials
+- AWS credentials
+- Cognito secrets
+- DATABASE_URL
+- database passwords
+- API keys
+- webhook secrets
+
+These must only exist on the server.
+
+Use environment variables / secure secret storage.
+
+The frontend must never receive Payfast private credentials.
+
+The backend must never return secrets through API responses.
+
+Do not log secrets.
+
+Do not include secrets in error messages.
+
+Do not include secrets in test fixtures committed to source control.
+
+==================================================
+5. ADMIN SECURITY
+==================================================
+
+Protect every admin route server-side.
+
+Do not rely on:
+
+- hidden frontend buttons
+- frontend route protection
+- localStorage role values
+- client-side role flags
+- URL obscurity
+
+Every admin API endpoint must independently verify:
+
+1. authenticated user
+2. authenticated user's actual role
+3. required permission
+
+Only authorized Admin users may perform administrative actions.
+
+Examples:
+
+- approve vendor
+- reject vendor
+- suspend vendor
+- reactivate vendor
+- view platform-wide data
+- modify platform commission
+- view sensitive payment information
+- manage users
+- access administrative settings
+
+Consider/enforce MFA for Admin accounts through AWS Cognito.
+
+==================================================
+6. AWS COGNITO AUTHENTICATION
+==================================================
+
+AWS Cognito is the authentication provider.
+
+Do NOT create a second custom password-authentication system.
+
+Do NOT store user passwords in PostgreSQL.
+
+Passwords must never be stored in plaintext.
+
+Use Cognito's secure authentication mechanisms.
+
+Require email verification where appropriate.
+
+Use secure token/session handling.
+
+Access tokens must be short-lived where practical.
+
+Refresh tokens must be handled securely.
+
+Never expose authentication tokens through URLs.
+
+Do not store sensitive authentication material in insecure localStorage.
+
+Review the existing localStorage implementation carefully.
+
+The customer's cart and receipt ID list may remain client-side if appropriate, but:
+
+- they must not be treated as trusted data
+- receipt IDs must be validated server-side
+- cart contents must be revalidated server-side before checkout
+- prices must always be retrieved from the database
+- ownership must always be verified server-side
+
+==================================================
+7. AUTHORIZATION / RBAC
+==================================================
+
+Implement/enforce:
+
+CUSTOMER
+VENDOR/KITCHEN
+ADMIN
+
+Server-side authorization is mandatory.
+
+Customer:
+- access own profile
+- access own orders
+- access own receipts
+- cannot access another customer's order
+
+Vendor:
+- access only their own kitchen
+- access only their own menu
+- access only orders belonging to their kitchen
+- cannot access another vendor's orders
+- cannot modify another vendor's menu
+
+Admin:
+- authorized platform-wide access
+
+Never trust a role value sent by the frontend.
+
+==================================================
+8. DATABASE SECURITY
+==================================================
+
+Use PostgreSQL + Drizzle ORM.
+
+Use Drizzle's parameterized query mechanisms.
+
+NEVER build SQL using string concatenation with user-controlled values.
+
+Avoid unsafe raw SQL.
+
+If raw SQL is absolutely necessary, use parameterized/bound parameters.
+
+Database credentials must remain server-side.
+
+DATABASE_URL must never reach the frontend.
+
+Production database must not be publicly exposed unnecessarily.
+
+Use least-privilege database credentials.
+
+==================================================
+9. ROW-LEVEL DATA ISOLATION
+==================================================
+
+Implement BOTH:
+
+A. application/server-side authorization
+B. database-level Row-Level Security where technically appropriate
+
+Do not assume PostgreSQL RLS alone replaces application authorization.
+
+Do not assume application authorization alone is sufficient where RLS can provide defense in depth.
+
+For every sensitive query, ensure the query is scoped appropriately.
+
+Examples:
+
+Customer orders:
+
+WHERE order.customer_id = authenticatedUserId
+
+Vendor orders:
+
+WHERE order.vendor_id = authenticatedVendorId
+
+Vendor menu:
+
+WHERE menu_item.vendor_id = authenticatedVendorId
+
+Never use only:
+
+WHERE id = requestedId
+
+without also checking ownership.
+
+Protect against IDOR/BOLA vulnerabilities.
+
+Example attack that must fail:
+
+Customer A requests:
+
+GET /api/orders/customer-B-order-id
+
+The server must return an authorization failure or safe not-found response.
+
+==================================================
+10. INPUT VALIDATION
+==================================================
+
+Validate ALL API inputs server-side.
+
+Use the existing Zod schemas.
+
+Do not rely solely on frontend validation.
+
+Validate:
+
+- request bodies
+- query parameters
+- route parameters
+- IDs
+- quantities
+- prices where relevant
+- email addresses
+- phone numbers
+- order notes
+- kitchen information
+- menu information
+- uploaded files
+- pagination
+- sorting/filtering parameters
+
+Apply sensible limits.
+
+Reject malformed and unexpected input.
+
+==================================================
+11. XSS PROTECTION
+==================================================
+
+Protect against stored and reflected XSS.
+
+Review every location where user-generated content is rendered.
+
+Potential user-controlled content includes:
+
+- kitchen names
+- kitchen descriptions
+- menu names
+- menu descriptions
+- order notes
+- profile information
+- reviews
+- uploaded image metadata
+- admin-entered content
+
+Do not dangerously render arbitrary HTML.
+
+Avoid unsafe use of:
+
+dangerouslySetInnerHTML
+
+unless there is a demonstrated requirement and content is sanitized using a trusted sanitizer.
+
+Implement appropriate Content Security Policy and security headers.
+
+==================================================
+12. FILE UPLOAD SECURITY
+==================================================
+
+If PlaceIT allows kitchen/menu/image uploads:
+
+Validate:
+
+- extension
+- MIME type
+- file size
+- filename
+- actual file content where possible
+
+Do not trust the MIME type supplied by the browser.
+
+Reject executable/scriptable files.
+
+Prevent path traversal.
+
+Generate safe server-side filenames.
+
+Do not allow uploaded files to execute as server-side code.
+
+Store uploads outside executable application directories where appropriate.
+
+Review image processing for malicious files.
+
+==================================================
+13. WEBHOOK SECURITY
+==================================================
+
+This is CRITICAL.
+
+Payfast payment notifications/webhooks/ITNs must NEVER be trusted merely because they reached the API endpoint.
+
+The backend must verify the notification using Payfast's documented verification/security mechanism.
+
+Only after successful verification may PlaceIT:
+
+- mark payment successful
+- mark order paid
+- create/confirm an order
+- record commission
+- update vendor payment state
+
+Do not allow:
+
+POST /webhook
+
+with arbitrary JSON
+
+to mark an order as paid.
+
+Implement idempotency.
+
+If Payfast sends the same notification twice:
+
+- do not create duplicate orders
+- do not create duplicate commission records
+- do not double-credit a vendor
+- do not double-process the payment
+
+Store an appropriate unique payment/transaction identifier.
+
+==================================================
+14. ORDER CREATION TRANSACTION
+==================================================
+
+Order creation and payment confirmation must be designed for data integrity.
+
+Where applicable, use a Drizzle/PostgreSQL transaction.
+
+Do not create duplicate orders when a payment callback is retried.
+
+Do not mark orders as paid based only on frontend success screens.
+
+The authoritative payment state must come from verified server-side Payfast communication.
+
+==================================================
+15. COMMISSION SECURITY
+==================================================
+
+PlaceIT's commission must be calculated server-side.
+
+Default platform commission:
+
+15%
+
+Do not allow:
+
+POST /checkout
+
+to submit:
+
+commission = 0
+
+or:
+
+commission = 1
+
+and have the server accept it.
+
+The backend must calculate the commission from the configured platform rate.
+
+The database must record the commission associated with the order/payment.
+
+Commission records should include enough information for auditing, such as:
+
+- order ID
+- vendor ID
+- rate
+- commission amount
+- payment reference
+- status
+- timestamps
+
+==================================================
+16. RATE LIMITING
+==================================================
+
+Implement rate limiting.
+
+At minimum protect:
+
+- login-related endpoints
+- registration
+- password reset
+- checkout
+- payment creation
+- webhook endpoints where appropriate
+- admin endpoints
+- search/API abuse
+- expensive queries
+- file uploads
+
+Use stricter limits for authentication and payment-related routes.
+
+Do not make rate limiting so aggressive that normal users cannot use the application.
+
+==================================================
+17. CORS
+==================================================
+
+Tighten CORS.
+
+Do not use:
+
+Access-Control-Allow-Origin: *
+
+in production unless there is a documented and justified reason.
+
+Allow only known PlaceIT frontend origins.
+
+Do not dynamically reflect arbitrary Origin headers.
+
+Review credentials/cookie configuration carefully.
+
+==================================================
+18. SECURITY HEADERS
+==================================================
+
+Configure appropriate production HTTP security headers.
+
+Review:
+
+- Content-Security-Policy
+- Strict-Transport-Security
+- X-Content-Type-Options
+- Referrer-Policy
+- frame/embedding protections
+- Permissions-Policy where appropriate
+
+Use secure defaults.
+
+Do not break legitimate application functionality.
+
+==================================================
+19. HTTPS / TRANSPORT SECURITY
+==================================================
+
+Production traffic must use HTTPS.
+
+Do not transmit:
+
+- passwords
+- tokens
+- payment information
+- personal information
+
+over insecure HTTP.
+
+Ensure secure database connections in production where applicable.
+
+==================================================
+20. SECRETS / ENVIRONMENT SECURITY
+==================================================
+
+Never commit:
+
+.env
+.env.local
+.env.production
+credentials
+private keys
+API secrets
+
+to GitHub.
+
+Check .gitignore.
+
+Search the repository for accidentally committed secrets.
+
+If secrets are discovered:
+
+1. identify them
+2. remove them from source
+3. rotate/revoke them
+4. ensure the new secret is stored securely
+
+Use server-side environment variables or a proper secrets-management system.
+
+==================================================
+21. LOGGING SECURITY
+==================================================
+
+Never log:
+
+- passwords
+- Cognito tokens
+- refresh tokens
+- Payfast Merchant Keys
+- Payfast passphrases
+- DATABASE_URL
+- API secrets
+- payment credentials
+
+Do log appropriate security/audit events.
+
+Examples:
+
+- successful admin action
+- failed authorization
+- vendor approval
+- vendor suspension
+- payment received
+- payment failed
+- refund
+- order status changes
+- suspicious repeated failures
+
+Use structured logging where appropriate.
+
+Do not expose stack traces or sensitive database information to production users.
+
+==================================================
+22. PRODUCTION ERROR HANDLING
+==================================================
+
+Production must not expose:
+
+- stack traces
+- SQL queries
+- database credentials
+- internal filesystem paths
+- environment variables
+- framework internals
+- secret values
+
+Return safe user-facing errors.
+
+Log detailed diagnostic information only on the server.
+
+Disable development/debug mode in production.
+
+==================================================
+23. DEPENDENCY SECURITY
+==================================================
+
+Audit all dependencies.
+
+Run appropriate package security checks for the pnpm monorepo.
+
+Review:
+
+- npm/pnpm audit
+- outdated vulnerable dependencies
+- known CVEs
+- transitive dependencies
+
+Use GitHub Dependabot where applicable.
+
+Pin dependency versions appropriately.
+
+Do not blindly install AI-suggested packages.
+
+Before adding a package, verify:
+
+- package purpose
+- maintenance status
+- popularity/reputation where relevant
+- known vulnerabilities
+- whether it is actually necessary
+
+==================================================
+24. DATABASE RESILIENCE
+==================================================
+
+Ensure production PostgreSQL has:
+
+- automated backups
+- point-in-time recovery where supported
+- encryption at rest
+- TLS
+- appropriate access controls
+
+Document how backups would be restored.
+
+An untested backup is not considered a verified recovery plan.
+
+==================================================
+25. POPIA / DATA PROTECTION
+==================================================
+
+PlaceIT operates in South Africa.
+
+Apply privacy-by-design principles appropriate to POPIA.
+
+Minimize collection of personal information.
+
+Do not collect sensitive information unless genuinely required.
+
+Review:
+
+- customer profile data
+- vendor information
+- phone numbers
+- email addresses
+- collection information
+- order history
+- payment references
+- uploaded content
+
+Implement appropriate retention/deletion rules.
+
+Do not retain personal data indefinitely without a legitimate reason.
+
+Do not expose one customer's information to another customer.
+
+Prepare the application for:
+
+- privacy policy
+- terms
+- appropriate consent/notice
+- data access/deletion processes where applicable
+
+Do not claim legal compliance simply because technical controls exist.
+
+==================================================
+26. LOCALSTORAGE SECURITY REVIEW
+==================================================
+
+The current frontend uses localStorage for:
+
+- cart information
+- customer's receipt ID list
+
+Audit this carefully.
+
+Do NOT store:
+
+- passwords
+- Payfast credentials
+- AWS credentials
+- private API keys
+- sensitive authentication secrets
+
+in localStorage.
+
+Treat all localStorage values as attacker-controlled.
+
+Before displaying a receipt based on a stored receipt ID, the API must verify that the authenticated customer is authorized to access that receipt/order.
+
+Do not allow localStorage manipulation to bypass authorization.
+
+==================================================
+27. CSRF
+==================================================
+
+Determine whether the current authentication/session architecture requires CSRF protection.
+
+If cookies are used for authentication or session state, implement appropriate CSRF defenses.
+
+Do not add unnecessary CSRF complexity if the actual token architecture makes it inapplicable, but document the reasoning.
+
+==================================================
+28. API SECURITY
+==================================================
+
+Audit every API route.
+
+For each route determine:
+
+- authentication required?
+- role required?
+- ownership required?
+- input validation?
+- rate limiting?
+- sensitive data exposure?
+- correct HTTP method?
+- safe error handling?
+
+Pay particular attention to:
+
+/api/orders
+/api/payfast/*
+/api/marketplace/*
+/api/admin/*
+/api/vendor/*
+
+Do not assume a route is safe because it is not linked from the frontend.
+
+Attackers can call APIs directly.
+
+==================================================
+29. BUSINESS LOGIC SECURITY
+==================================================
+
+Test for:
+
+- price manipulation
+- quantity manipulation
+- vendor ID manipulation
+- order ID manipulation
+- commission manipulation
+- payment amount manipulation
+- unauthorized order cancellation
+- unauthorized order status changes
+- duplicate checkout
+- duplicate payment notification
+- replay attacks
+- vendor-to-vendor data access
+- customer-to-customer data access
+- privilege escalation
+
+Example:
+
+If Kitchen A's burger costs R45, a malicious customer must not be able to submit:
+
+unit_price = 1
+
+and have the server accept R1.
+
+The server must retrieve the authoritative menu price.
+
+==================================================
+30. SECURITY AGAINST PRIVILEGE ESCALATION
+==================================================
+
+A user must never be able to become:
+
+Vendor
+or
+Admin
+
+by modifying:
+
+- request body
+- localStorage
+- JWT claims
+- URL
+- frontend state
+- browser developer tools
+
+Role assignment must happen through trusted server-side mechanisms.
+
+==================================================
+31. AUDIT TRAIL
+==================================================
+
+Maintain audit records for important administrative and security-sensitive actions.
+
+At minimum consider:
+
+- actor
+- action
+- affected resource
+- timestamp
+- result
+
+Do not log secrets.
+
+==================================================
+32. SECURITY TESTING
+==================================================
+
+Create automated tests for the security-critical functionality.
+
+At minimum test:
+
+AUTHORIZATION:
+- customer cannot access another customer's order
+- vendor cannot access another vendor's order
+- vendor cannot modify another vendor's menu
+- customer cannot access vendor administration
+- non-admin cannot access admin endpoints
+
+PAYMENTS:
+- invalid payment notification rejected
+- invalid Payfast verification rejected
+- duplicate notification does not duplicate processing
+- client cannot alter commission
+- client cannot alter order total
+- client cannot change vendor after checkout
+- payment cannot mark arbitrary order as paid
+
+DATABASE:
+- injection attempts fail
+- unauthorized records cannot be retrieved
+- unauthorized records cannot be modified
+
+INPUT:
+- invalid IDs rejected
+- invalid quantities rejected
+- oversized inputs rejected
+- malicious content handled safely
+
+UPLOADS:
+- executable files rejected
+- oversized files rejected
+- invalid MIME/content rejected
+
+RATE LIMITING:
+- repeated authentication attempts throttled
+- sensitive endpoint abuse throttled
+
+==================================================
+33. SECURITY SCANNING
+==================================================
+
+Run appropriate automated security checks against the existing codebase.
+
+Use:
+
+- dependency vulnerability scanning
+- static analysis where practical
+- TypeScript checks
+- linting
+- API security checks
+- secret scanning
+- existing project tests
+
+AI tools such as Replit AI or Claude may be used as additional code-review assistance.
+
+However:
+
+AI review is NOT a substitute for:
+- automated security tooling
+- proper testing
+- professional penetration testing before major public launch
+
+Do not claim that an AI review proves the application is secure.
+
+==================================================
+34. DO NOT BREAK THE APPLICATION
+==================================================
+
+Security fixes must preserve legitimate PlaceIT functionality.
+
+After security changes, verify:
+
+- kitchen discovery
+- kitchen pages
+- menu browsing
+- cart
+- checkout
+- order creation
+- payment flow
+- customer order history
+- receipts
+- vendor functionality
+- admin functionality
+
+If a security fix requires a functional change, document it.
+
+==================================================
+35. INSPECT BEFORE MODIFYING
+==================================================
+
+Before changing code:
+
+1. Inspect the repository structure.
+2. Inspect package.json files.
+3. Inspect pnpm workspace configuration.
+4. Inspect the API routes.
+5. Inspect authentication integration.
+6. Inspect Drizzle schemas.
+7. Inspect database queries.
+8. Inspect Payfast integration.
+9. Inspect environment variable usage.
+10. Inspect frontend localStorage usage.
+11. Inspect existing tests.
+12. Identify existing security controls.
+
+Do not assume a control is missing until you inspect the code.
+
+==================================================
+36. SECURITY FINDINGS CLASSIFICATION
+==================================================
+
+Classify findings:
+
+CRITICAL
+- payment compromise
+- authentication bypass
+- admin privilege escalation
+- cross-user data exposure
+- secret exposure
+- ability to manipulate payment/order amounts
+
+HIGH
+- authorization bypass
+- vendor data exposure
+- webhook bypass
+- significant XSS
+- SQL injection
+- serious file-upload vulnerability
+
+MEDIUM
+- insufficient rate limiting
+- weak security headers
+- information disclosure
+- inadequate logging
+
+LOW
+- minor hardening issues
+- non-critical configuration improvements
+
+Do not artificially downgrade vulnerabilities.
+
+==================================================
+37. REQUIRED FINAL SECURITY REPORT
+==================================================
+
+After completing the audit and fixes, produce a SECURITY_AUDIT_REPORT.md.
+
+The report must contain:
+
+1. Executive summary
+2. Architecture reviewed
+3. Authentication review
+4. Authorization/RBAC review
+5. Database security review
+6. API security review
+7. Payfast/payment security review
+8. Webhook security review
+9. Secrets review
+10. XSS/input validation review
+11. File upload review
+12. Rate limiting review
+13. CORS review
+14. Security headers review
+15. localStorage review
+16. Dependency review
+17. POPIA/privacy review
+18. Automated tests performed
+19. Vulnerabilities discovered
+20. Vulnerabilities fixed
+21. Remaining risks
+22. Recommended future security work
+
+For each requirement use:
+
+PASS
+FAIL
+NOT IMPLEMENTED
+NOT APPLICABLE
+
+Do not mark something PASS merely because the code appears to intend to implement it.
+
+A requirement is PASS only when the implementation has been inspected and, where practical, tested.
+
+==================================================
+38. SECURITY GATE
+==================================================
+
+At the end of the audit, produce a table:
+
+Requirement | Status | Evidence | Test/Verification
+
+The following MUST be PASS before calling the application production-ready:
+
+- server-side authentication
+- server-side authorization
+- admin protection
+- customer data isolation
+- vendor data isolation
+- payment integrity
+- Payfast webhook verification
+- payment idempotency
+- server-side commission calculation
+- vendor-specific payment routing
+- secret protection
+- SQL injection protection
+- input validation
+- XSS protections
+- production error handling
+- rate limiting for sensitive endpoints
+- CORS configuration
+- dependency vulnerability review
+- production debug disabled
+- no secrets committed to repository
+
+If any critical or high-severity vulnerability remains unresolved, explicitly state:
+
+PRODUCTION SECURITY GATE: FAILED
+
+Do not hide or minimize unresolved issues.
+
+If all critical/high security requirements pass and no known critical/high vulnerabilities remain:
+
+PRODUCTION SECURITY GATE: PASSED
+
+==================================================
+39. IMPORTANT IMPLEMENTATION RULE
+==================================================
+
+Do not simply create a document saying that these controls SHOULD exist.
+
+Actually inspect the existing code and implement/fix the controls.
+
+Do not create fake security middleware that is never used.
+
+Do not create unused validation functions.
+
+Do not add security configuration that is not connected to the actual Express application.
+
+Do not claim Payfast verification is implemented unless the real Payfast verification logic is present and tested.
+
+Do not claim RLS is implemented unless PostgreSQL RLS policies are actually configured and enforced.
+
+Do not claim AWS Cognito authorization is implemented unless the API actually verifies authenticated identities and enforces authorization.
+
+Every security control must be connected to the real PlaceIT execution path.
+
+==================================================
+40. FINAL INSTRUCTION
+==================================================
+
+Perform the security audit now.
+
+First inspect the existing PlaceIT implementation.
+
+Then identify vulnerabilities.
+
+Then implement the required security controls.
+
+Then run tests and security checks.
+
+Then produce SECURITY_AUDIT_REPORT.md.
+
+Do not rewrite the application unnecessarily.
+
+Preserve existing functionality.
+
+Prioritize correctness over speed.
+
+Treat payment, authentication, authorization, database access, and personal data as high-risk areas.
+
+The goal is not to make PlaceIT "look secure."
+
+The goal is to make the actual running application significantly harder to compromise.
