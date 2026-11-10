@@ -21,11 +21,15 @@ import type {
 
 import type {
   HealthStatus,
+  ListVendorOrdersParams,
   ListVendorsParams,
   OrderInput,
   OrderReceipt,
+  PickupCodeVerification,
   Vendor,
-  VendorDetail
+  VendorDetail,
+  VendorOrder,
+  VendorOrderStatusUpdate
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -303,7 +307,7 @@ export const getCreateOrderUrl = () => {
 }
 
 /**
- * The server verifies every menu item belongs to the selected vendor and calculates all amounts in integer cents. The 15% booking fee is collected online; the balance is paid directly to the vendor at collection.
+ * The server verifies every menu item belongs to the selected vendor and calculates all amounts in integer cents. PayFast collects the full order total online and splits 15% to PlaceIT and 85% to the vendor.
  * @summary Place a collection order with one vendor
  */
 export const createOrder = async (orderInput: OrderInput, options?: Parameters<typeof customFetch>[1]): Promise<OrderReceipt> => {
@@ -383,20 +387,20 @@ export const useCreateOrder = <TError = ErrorType<void>,
       return useMutation(getCreateOrderMutationOptions(options));
     }
 
-export const getGetOrderUrl = (orderId: string,) => {
+export const getGetOrderUrl = (orderReference: string,) => {
 
 
 
 
-  return `/api/orders/${orderId}`
+  return `/api/orders/${orderReference}`
 }
 
 /**
- * @summary Track an order using its private receipt ID
+ * @summary Track an order using its public receipt reference
  */
-export const getOrder = async (orderId: string, options?: Parameters<typeof customFetch>[1]): Promise<OrderReceipt> => {
+export const getOrder = async (orderReference: string, options?: Parameters<typeof customFetch>[1]): Promise<OrderReceipt> => {
 
-  return customFetch<OrderReceipt>(getGetOrderUrl(orderId),
+  return customFetch<OrderReceipt>(getGetOrderUrl(orderReference),
   {
     ...options,
     method: 'GET'
@@ -409,29 +413,29 @@ export const getOrder = async (orderId: string, options?: Parameters<typeof cust
 
 
 
-export const getGetOrderQueryKey = (orderId: string,) => {
+export const getGetOrderQueryKey = (orderReference: string,) => {
     return [
-    `/api/orders/${orderId}`
+    `/api/orders/${orderReference}`
     ] as const;
     }
 
 
-export const getGetOrderQueryOptions = <TData = Awaited<ReturnType<typeof getOrder>>, TError = ErrorType<void>>(orderId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOrder>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getGetOrderQueryOptions = <TData = Awaited<ReturnType<typeof getOrder>>, TError = ErrorType<void>>(orderReference: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOrder>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetOrderQueryKey(orderId);
+  const queryKey =  queryOptions?.queryKey ?? getGetOrderQueryKey(orderReference);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getOrder>>> = ({ signal }) => getOrder(orderId, { signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getOrder>>> = ({ signal }) => getOrder(orderReference, { signal, ...requestOptions });
 
 
 
 
 
-   return  { queryKey, queryFn, enabled: orderId !== null && orderId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getOrder>>, TError, TData> & { queryKey: QueryKey }
+   return  { queryKey, queryFn, enabled: orderReference !== null && orderReference !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getOrder>>, TError, TData> & { queryKey: QueryKey }
 }
 
 export type GetOrderQueryResult = NonNullable<Awaited<ReturnType<typeof getOrder>>>
@@ -439,15 +443,15 @@ export type GetOrderQueryError = ErrorType<void>
 
 
 /**
- * @summary Track an order using its private receipt ID
+ * @summary Track an order using its public receipt reference
  */
 
 export function useGetOrder<TData = Awaited<ReturnType<typeof getOrder>>, TError = ErrorType<void>>(
- orderId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOrder>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+ orderReference: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOrder>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getGetOrderQueryOptions(orderId,options)
+  const queryOptions = getGetOrderQueryOptions(orderReference,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -459,4 +463,266 @@ export function useGetOrder<TData = Awaited<ReturnType<typeof getOrder>>, TError
 
 
 
+
+export const getListVendorOrdersUrl = (params?: ListVendorOrdersParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/vendor/orders?${stringifiedParams}` : `/api/vendor/orders`
+}
+
+/**
+ * @summary List and search the authenticated vendor's orders
+ */
+export const listVendorOrders = async (params?: ListVendorOrdersParams, options?: Parameters<typeof customFetch>[1]): Promise<VendorOrder[]> => {
+
+  return customFetch<VendorOrder[]>(getListVendorOrdersUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListVendorOrdersQueryKey = (params?: ListVendorOrdersParams,) => {
+    return [
+    `/api/vendor/orders`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListVendorOrdersQueryOptions = <TData = Awaited<ReturnType<typeof listVendorOrders>>, TError = ErrorType<void>>(params?: ListVendorOrdersParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listVendorOrders>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListVendorOrdersQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listVendorOrders>>> = ({ signal }) => listVendorOrders(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listVendorOrders>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListVendorOrdersQueryResult = NonNullable<Awaited<ReturnType<typeof listVendorOrders>>>
+export type ListVendorOrdersQueryError = ErrorType<void>
+
+
+/**
+ * @summary List and search the authenticated vendor's orders
+ */
+
+export function useListVendorOrders<TData = Awaited<ReturnType<typeof listVendorOrders>>, TError = ErrorType<void>>(
+ params?: ListVendorOrdersParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listVendorOrders>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListVendorOrdersQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateVendorOrderStatusUrl = (orderNumber: string,) => {
+
+
+
+
+  return `/api/vendor/orders/${orderNumber}/status`
+}
+
+/**
+ * @summary Update a vendor order status
+ */
+export const updateVendorOrderStatus = async (orderNumber: string,
+    vendorOrderStatusUpdate: VendorOrderStatusUpdate, options?: Parameters<typeof customFetch>[1]): Promise<VendorOrder> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<VendorOrder>(getUpdateVendorOrderStatusUrl(orderNumber),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(vendorOrderStatusUpdate)
+  }
+);}
+
+
+
+
+
+export const getUpdateVendorOrderStatusMutationKey = () => ['updateVendorOrderStatus'] as const;
+
+export const getUpdateVendorOrderStatusMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateVendorOrderStatus>>, TError,UpdateVendorOrderStatusMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateVendorOrderStatus>>, TError,UpdateVendorOrderStatusMutationVariables, TContext> => {
+
+const mutationKey = getUpdateVendorOrderStatusMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateVendorOrderStatus>>, UpdateVendorOrderStatusMutationVariables> = (props) => {
+          const {orderNumber,data} = props ?? {};
+
+          return  updateVendorOrderStatus(orderNumber,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateVendorOrderStatusMutationResult = NonNullable<Awaited<ReturnType<typeof updateVendorOrderStatus>>>
+    export type UpdateVendorOrderStatusMutationBody = BodyType<VendorOrderStatusUpdate>
+    export type UpdateVendorOrderStatusMutationError = ErrorType<void>
+    export type UpdateVendorOrderStatusMutationVariables = {orderNumber: string;data: BodyType<VendorOrderStatusUpdate>}
+
+    /**
+ * @summary Update a vendor order status
+ */
+export const useUpdateVendorOrderStatus = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateVendorOrderStatus>>, TError,UpdateVendorOrderStatusMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateVendorOrderStatus>>,
+        TError,
+        UpdateVendorOrderStatusMutationVariables,
+        TContext
+      > => {
+      return useMutation(getUpdateVendorOrderStatusMutationOptions(options));
+    }
+
+export const getCompleteVendorOrderUrl = (orderNumber: string,) => {
+
+
+
+
+  return `/api/vendor/orders/${orderNumber}/complete`
+}
+
+/**
+ * @summary Verify pickup code and complete a vendor order
+ */
+export const completeVendorOrder = async (orderNumber: string,
+    pickupCodeVerification: PickupCodeVerification, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<void>(getCompleteVendorOrderUrl(orderNumber),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(pickupCodeVerification)
+  }
+);}
+
+
+
+
+
+export const getCompleteVendorOrderMutationKey = () => ['completeVendorOrder'] as const;
+
+export const getCompleteVendorOrderMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof completeVendorOrder>>, TError,CompleteVendorOrderMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof completeVendorOrder>>, TError,CompleteVendorOrderMutationVariables, TContext> => {
+
+const mutationKey = getCompleteVendorOrderMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof completeVendorOrder>>, CompleteVendorOrderMutationVariables> = (props) => {
+          const {orderNumber,data} = props ?? {};
+
+          return  completeVendorOrder(orderNumber,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CompleteVendorOrderMutationResult = NonNullable<Awaited<ReturnType<typeof completeVendorOrder>>>
+    export type CompleteVendorOrderMutationBody = BodyType<PickupCodeVerification>
+    export type CompleteVendorOrderMutationError = ErrorType<void>
+    export type CompleteVendorOrderMutationVariables = {orderNumber: string;data: BodyType<PickupCodeVerification>}
+
+    /**
+ * @summary Verify pickup code and complete a vendor order
+ */
+export const useCompleteVendorOrder = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof completeVendorOrder>>, TError,CompleteVendorOrderMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof completeVendorOrder>>,
+        TError,
+        CompleteVendorOrderMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCompleteVendorOrderMutationOptions(options));
+    }
 

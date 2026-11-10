@@ -14,6 +14,8 @@ export interface OrderInput {
      * @maxLength 100
      */
   customerName: string;
+  /** @maxLength 254 */
+  customerEmail: string;
   /** @pattern ^(\+27|0)[6-8][0-9]{8}$ */
   customerPhone: string;
   /** @maxLength 240 */

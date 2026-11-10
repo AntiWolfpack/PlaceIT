@@ -7,6 +7,7 @@
  */
 
 export * from './healthStatus';
+export * from './listVendorOrdersParams';
 export * from './listVendorsParams';
 export * from './menuItem';
 export * from './orderInput';
@@ -16,5 +17,9 @@ export * from './orderReceipt';
 export * from './orderReceiptCommissionRateBps';
 export * from './orderReceiptOrderStatus';
 export * from './orderReceiptPaymentStatus';
+export * from './pickupCodeVerification';
 export * from './vendor';
 export * from './vendorDetail';
+export * from './vendorOrder';
+export * from './vendorOrderStatusUpdate';
+export * from './vendorOrderStatusUpdateStatus';

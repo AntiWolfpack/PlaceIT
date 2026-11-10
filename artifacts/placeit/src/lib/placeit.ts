@@ -21,14 +21,21 @@ export const statusLabel = (status: OrderReceipt['orderStatus']) =>
   ({
     awaiting_payment: 'Awaiting payment',
     placed: 'Order received',
+    accepted: 'Accepted by kitchen',
     preparing: 'Being prepared',
     ready: 'Ready for collection',
-    collected: 'Collected',
+    completed: 'Collected',
     cancelled: 'Cancelled',
+    refunded: 'Refunded',
   })[status] ?? status;
 
 export const paymentLabel = (status: OrderReceipt['paymentStatus']) =>
-  ({ pending: 'PayFast payment pending', paid: 'Paid via PayFast', failed: 'PayFast payment failed' })[status] ?? status;
+  ({
+    pending: 'PayFast payment pending',
+    paid: 'Paid via PayFast',
+    failed: 'PayFast payment failed',
+    refunded: 'Refunded',
+  })[status] ?? status;
 
 export const imageFallback = (seed: string) => {
   const palettes = [

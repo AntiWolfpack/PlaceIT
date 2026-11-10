@@ -13,4 +13,5 @@ export const OrderReceiptPaymentStatus = {
   pending: 'pending',
   paid: 'paid',
   failed: 'failed',
+  refunded: 'refunded',
 } as const;

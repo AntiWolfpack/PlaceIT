@@ -16,6 +16,8 @@ export const vendorsTable = pgTable("vendors", {
   pickupEtaMinutes: integer("pickup_eta_minutes").notNull().default(25),
   heroImageUrl: text("hero_image_url"),
   payfastMerchantId: text("payfast_merchant_id"),
+  supabaseUserId: text("supabase_user_id").unique(),
+  whatsappPhone: text("whatsapp_phone"),
   isOpen: boolean("is_open").notNull().default(true),
   isFeatured: boolean("is_featured").notNull().default(false),
 });

@@ -5,6 +5,24 @@
  * PlaceIT South African food marketplace API
  * OpenAPI spec version: 0.1.0
  */
+export type VendorOrderStatusUpdateStatus = typeof VendorOrderStatusUpdateStatus[keyof typeof VendorOrderStatusUpdateStatus];
+
+
+export const VendorOrderStatusUpdateStatus = {
+  accepted: 'accepted',
+  preparing: 'preparing',
+  ready: 'ready',
+} as const;
+
+export interface VendorOrderStatusUpdate {
+  status: VendorOrderStatusUpdateStatus;
+}
+
+export interface PickupCodeVerification {
+  /** @pattern ^\d{4}$ */
+  pickupCode: string;
+}
+
 export interface HealthStatus {
   status: string;
 }
@@ -30,7 +48,7 @@ export interface Vendor {
 
 export interface MenuItem {
   id: string;
-  vendorId: string;
+  vendorId?: string;
   name: string;
   description: string;
   category: string;
@@ -63,6 +81,8 @@ export interface OrderInput {
      * @maxLength 100
      */
   customerName: string;
+  /** @maxLength 254 */
+  customerEmail: string;
   /** @pattern ^(\+27|0)[6-8][0-9]{8}$ */
   customerPhone: string;
   /** @maxLength 240 */
@@ -96,6 +116,7 @@ export const OrderReceiptPaymentStatus = {
   pending: 'pending',
   paid: 'paid',
   failed: 'failed',
+  refunded: 'refunded',
 } as const;
 
 export type OrderReceiptOrderStatus = typeof OrderReceiptOrderStatus[keyof typeof OrderReceiptOrderStatus];
@@ -104,30 +125,53 @@ export type OrderReceiptOrderStatus = typeof OrderReceiptOrderStatus[keyof typeo
 export const OrderReceiptOrderStatus = {
   awaiting_payment: 'awaiting_payment',
   placed: 'placed',
+  accepted: 'accepted',
   preparing: 'preparing',
   ready: 'ready',
-  collected: 'collected',
+  completed: 'completed',
   cancelled: 'cancelled',
+  refunded: 'refunded',
 } as const;
 
 export interface OrderReceipt {
+  /** Opaque public receipt token; never the database primary key */
   id: string;
-  vendorId: string;
+  /**
+     * @nullable
+     * @pattern ^PIT-[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{5}$
+     */
+  orderNumber: string | null;
+  /**
+     * @nullable
+     * @pattern ^\d{4}$
+     */
+  pickupCode: string | null;
   vendorName: string;
   pickupAddress: string;
   customerName: string;
   items: OrderLine[];
   orderTotalCents: number;
+  /** PlaceIT's 15% commission amount, retained for API compatibility. */
   bookingFeeCents: number;
   commissionRateBps: OrderReceiptCommissionRateBps;
   commissionAmountCents: number;
+  /** Always zero when PayFast full-payment split is active. */
   dueAtCollectionCents: number;
   paymentStatus: OrderReceiptPaymentStatus;
   orderStatus: OrderReceiptOrderStatus;
-  /** @nullable */
+  /**
+     * PayFast checkout redirect URL, when payment configuration is complete.
+     * @nullable
+     */
   checkoutUrl?: string | null;
   createdAt: string;
 }
+
+export type VendorOrder = OrderReceipt & ({
+  customerPhone: string;
+  /** @nullable */
+  collectionNote: string | null;
+});
 
 export type ListVendorsParams = {
 /**
@@ -136,5 +180,13 @@ export type ListVendorsParams = {
 search?: string;
 category?: string;
 openNow?: boolean;
+};
+
+export type ListVendorOrdersParams = {
+/**
+ * Search by public order number
+ * @maxLength 20
+ */
+search?: string;
 };
 

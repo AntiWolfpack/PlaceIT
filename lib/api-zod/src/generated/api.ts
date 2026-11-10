@@ -77,7 +77,7 @@ export const GetVendorResponse = zod.object({
 }),
   "menuItems": zod.array(zod.object({
   "id": zod.string().uuid(),
-  "vendorId": zod.string().uuid(),
+  "vendorId": zod.string().uuid().optional(),
   "name": zod.string(),
   "description": zod.string(),
   "category": zod.string(),
@@ -90,11 +90,13 @@ export const GetVendorResponse = zod.object({
 
 
 /**
- * The server verifies every menu item belongs to the selected vendor and calculates all amounts in integer cents. The 15% booking fee is collected online; the balance is paid directly to the vendor at collection.
+ * The server verifies every menu item belongs to the selected vendor and calculates all amounts in integer cents. PayFast collects the full order total online and splits 15% to PlaceIT and 85% to the vendor.
  * @summary Place a collection order with one vendor
  */
 export const createOrderBodyCustomerNameMin = 2;
 export const createOrderBodyCustomerNameMax = 100;
+
+export const createOrderBodyCustomerEmailMax = 254;
 
 export const createOrderBodyCustomerPhoneRegExp = new RegExp('^(\\+27|0)[6-8][0-9]{8}$');
 export const createOrderBodyCollectionNoteMax = 240;
@@ -108,6 +110,7 @@ export const createOrderBodyItemsMax = 30;
 export const CreateOrderBody = zod.object({
   "vendorId": zod.string().uuid(),
   "customerName": zod.string().min(createOrderBodyCustomerNameMin).max(createOrderBodyCustomerNameMax),
+  "customerEmail": zod.string().email().max(createOrderBodyCustomerEmailMax),
   "customerPhone": zod.string().regex(createOrderBodyCustomerPhoneRegExp),
   "collectionNote": zod.string().max(createOrderBodyCollectionNoteMax).optional(),
   "items": zod.array(zod.object({
@@ -116,9 +119,14 @@ export const CreateOrderBody = zod.object({
 })).min(1).max(createOrderBodyItemsMax)
 })
 
+export const createOrderResponseOrderNumberRegExp = new RegExp('^PIT-[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{5}$');
+export const createOrderResponsePickupCodeRegExp = new RegExp('^\\d{4}$');
+
+
 export const CreateOrderResponse = zod.object({
-  "id": zod.string().uuid(),
-  "vendorId": zod.string().uuid(),
+  "id": zod.string().uuid().describe('Opaque public receipt token; never the database primary key'),
+  "orderNumber": zod.string().regex(createOrderResponseOrderNumberRegExp).nullable(),
+  "pickupCode": zod.string().regex(createOrderResponsePickupCodeRegExp).nullable(),
   "vendorName": zod.string(),
   "pickupAddress": zod.string(),
   "customerName": zod.string(),
@@ -130,27 +138,32 @@ export const CreateOrderResponse = zod.object({
   "lineTotalCents": zod.number().int()
 })),
   "orderTotalCents": zod.number().int(),
-  "bookingFeeCents": zod.number().int(),
+  "bookingFeeCents": zod.number().int().describe('PlaceIT\'s 15% commission amount, retained for API compatibility.'),
   "commissionRateBps": zod.literal(1500),
   "commissionAmountCents": zod.number().int(),
-  "dueAtCollectionCents": zod.number().int(),
-  "paymentStatus": zod.enum(['pending', 'paid', 'failed']),
-  "orderStatus": zod.enum(['awaiting_payment', 'placed', 'preparing', 'ready', 'collected', 'cancelled']),
-  "checkoutUrl": zod.string().url().nullish(),
+  "dueAtCollectionCents": zod.number().int().describe('Always zero when PayFast full-payment split is active.'),
+  "paymentStatus": zod.enum(['pending', 'paid', 'failed', 'refunded']),
+  "orderStatus": zod.enum(['awaiting_payment', 'placed', 'accepted', 'preparing', 'ready', 'completed', 'cancelled', 'refunded']),
+  "checkoutUrl": zod.string().url().nullish().describe('PayFast checkout redirect URL, when payment configuration is complete.'),
   "createdAt": zod.coerce.date()
 })
 
 
 /**
- * @summary Track an order using its private receipt ID
+ * @summary Track an order using its public receipt reference
  */
 export const GetOrderParams = zod.object({
-  "orderId": zod.coerce.string().uuid()
+  "orderReference": zod.coerce.string()
 })
 
+export const getOrderResponseOrderNumberRegExp = new RegExp('^PIT-[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{5}$');
+export const getOrderResponsePickupCodeRegExp = new RegExp('^\\d{4}$');
+
+
 export const GetOrderResponse = zod.object({
-  "id": zod.string().uuid(),
-  "vendorId": zod.string().uuid(),
+  "id": zod.string().uuid().describe('Opaque public receipt token; never the database primary key'),
+  "orderNumber": zod.string().regex(getOrderResponseOrderNumberRegExp).nullable(),
+  "pickupCode": zod.string().regex(getOrderResponsePickupCodeRegExp).nullable(),
   "vendorName": zod.string(),
   "pickupAddress": zod.string(),
   "customerName": zod.string(),
@@ -162,14 +175,126 @@ export const GetOrderResponse = zod.object({
   "lineTotalCents": zod.number().int()
 })),
   "orderTotalCents": zod.number().int(),
-  "bookingFeeCents": zod.number().int(),
+  "bookingFeeCents": zod.number().int().describe('PlaceIT\'s 15% commission amount, retained for API compatibility.'),
   "commissionRateBps": zod.literal(1500),
   "commissionAmountCents": zod.number().int(),
-  "dueAtCollectionCents": zod.number().int(),
-  "paymentStatus": zod.enum(['pending', 'paid', 'failed']),
-  "orderStatus": zod.enum(['awaiting_payment', 'placed', 'preparing', 'ready', 'collected', 'cancelled']),
-  "checkoutUrl": zod.string().url().nullish(),
+  "dueAtCollectionCents": zod.number().int().describe('Always zero when PayFast full-payment split is active.'),
+  "paymentStatus": zod.enum(['pending', 'paid', 'failed', 'refunded']),
+  "orderStatus": zod.enum(['awaiting_payment', 'placed', 'accepted', 'preparing', 'ready', 'completed', 'cancelled', 'refunded']),
+  "checkoutUrl": zod.string().url().nullish().describe('PayFast checkout redirect URL, when payment configuration is complete.'),
   "createdAt": zod.coerce.date()
 })
+
+
+/**
+ * @summary List and search the authenticated vendor's orders
+ */
+export const listVendorOrdersQuerySearchMax = 20;
+
+
+
+export const ListVendorOrdersQueryParams = zod.object({
+  "search": zod.coerce.string().max(listVendorOrdersQuerySearchMax).optional().describe('Search by public order number')
+})
+
+export const listVendorOrdersResponseOneOrderNumberRegExp = new RegExp('^PIT-[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{5}$');
+export const listVendorOrdersResponseOnePickupCodeRegExp = new RegExp('^\\d{4}$');
+
+
+export const ListVendorOrdersResponseItem = zod.object({
+  "id": zod.string().uuid().describe('Opaque public receipt token; never the database primary key'),
+  "orderNumber": zod.string().regex(listVendorOrdersResponseOneOrderNumberRegExp).nullable(),
+  "pickupCode": zod.string().regex(listVendorOrdersResponseOnePickupCodeRegExp).nullable(),
+  "vendorName": zod.string(),
+  "pickupAddress": zod.string(),
+  "customerName": zod.string(),
+  "items": zod.array(zod.object({
+  "productId": zod.string().uuid(),
+  "productName": zod.string(),
+  "quantity": zod.number().int(),
+  "unitPriceCents": zod.number().int(),
+  "lineTotalCents": zod.number().int()
+})),
+  "orderTotalCents": zod.number().int(),
+  "bookingFeeCents": zod.number().int().describe('PlaceIT\'s 15% commission amount, retained for API compatibility.'),
+  "commissionRateBps": zod.literal(1500),
+  "commissionAmountCents": zod.number().int(),
+  "dueAtCollectionCents": zod.number().int().describe('Always zero when PayFast full-payment split is active.'),
+  "paymentStatus": zod.enum(['pending', 'paid', 'failed', 'refunded']),
+  "orderStatus": zod.enum(['awaiting_payment', 'placed', 'accepted', 'preparing', 'ready', 'completed', 'cancelled', 'refunded']),
+  "checkoutUrl": zod.string().url().nullish().describe('PayFast checkout redirect URL, when payment configuration is complete.'),
+  "createdAt": zod.coerce.date()
+}).and(zod.object({
+  "customerPhone": zod.string(),
+  "collectionNote": zod.string().nullable()
+}))
+export const ListVendorOrdersResponse = zod.array(ListVendorOrdersResponseItem)
+
+
+/**
+ * @summary Update a vendor order status
+ */
+export const updateVendorOrderStatusPathOrderNumberRegExp = new RegExp('^PIT-[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{5}$');
+
+
+export const UpdateVendorOrderStatusParams = zod.object({
+  "orderNumber": zod.coerce.string().regex(updateVendorOrderStatusPathOrderNumberRegExp)
+})
+
+export const UpdateVendorOrderStatusBody = zod.object({
+  "status": zod.enum(['accepted', 'preparing', 'ready'])
+})
+
+export const updateVendorOrderStatusResponseOneOrderNumberRegExp = new RegExp('^PIT-[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{5}$');
+export const updateVendorOrderStatusResponseOnePickupCodeRegExp = new RegExp('^\\d{4}$');
+
+
+export const UpdateVendorOrderStatusResponse = zod.object({
+  "id": zod.string().uuid().describe('Opaque public receipt token; never the database primary key'),
+  "orderNumber": zod.string().regex(updateVendorOrderStatusResponseOneOrderNumberRegExp).nullable(),
+  "pickupCode": zod.string().regex(updateVendorOrderStatusResponseOnePickupCodeRegExp).nullable(),
+  "vendorName": zod.string(),
+  "pickupAddress": zod.string(),
+  "customerName": zod.string(),
+  "items": zod.array(zod.object({
+  "productId": zod.string().uuid(),
+  "productName": zod.string(),
+  "quantity": zod.number().int(),
+  "unitPriceCents": zod.number().int(),
+  "lineTotalCents": zod.number().int()
+})),
+  "orderTotalCents": zod.number().int(),
+  "bookingFeeCents": zod.number().int().describe('PlaceIT\'s 15% commission amount, retained for API compatibility.'),
+  "commissionRateBps": zod.literal(1500),
+  "commissionAmountCents": zod.number().int(),
+  "dueAtCollectionCents": zod.number().int().describe('Always zero when PayFast full-payment split is active.'),
+  "paymentStatus": zod.enum(['pending', 'paid', 'failed', 'refunded']),
+  "orderStatus": zod.enum(['awaiting_payment', 'placed', 'accepted', 'preparing', 'ready', 'completed', 'cancelled', 'refunded']),
+  "checkoutUrl": zod.string().url().nullish().describe('PayFast checkout redirect URL, when payment configuration is complete.'),
+  "createdAt": zod.coerce.date()
+}).and(zod.object({
+  "customerPhone": zod.string(),
+  "collectionNote": zod.string().nullable()
+}))
+
+
+/**
+ * @summary Verify pickup code and complete a vendor order
+ */
+export const completeVendorOrderPathOrderNumberRegExp = new RegExp('^PIT-[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{5}$');
+
+
+export const CompleteVendorOrderParams = zod.object({
+  "orderNumber": zod.coerce.string().regex(completeVendorOrderPathOrderNumberRegExp)
+})
+
+export const completeVendorOrderBodyPickupCodeRegExp = new RegExp('^\\d{4}$');
+
+
+export const CompleteVendorOrderBody = zod.object({
+  "pickupCode": zod.string().regex(completeVendorOrderBodyPickupCodeRegExp)
+})
+
+export const CompleteVendorOrderResponse = zod.unknown()
 
 

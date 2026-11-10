@@ -19,11 +19,15 @@ export default function Home() {
   const [openNow, setOpenNow] = useState(false);
   const params = useMemo(() => ({ search: search || undefined, category: category || undefined, openNow: openNow || undefined }), [search, category, openNow]);
   const vendors = useListVendors(params, { query: { queryKey: getListVendorsQueryKey(params) } });
-  const list = vendors.data ?? [];
+  const list = Array.isArray(vendors.data) ? vendors.data : [];
   return (
     <div>
-      <section className="relative overflow-hidden bg-secondary text-secondary-foreground">
-        <div className="mx-auto grid max-w-7xl gap-10 px-5 pb-14 pt-12 lg:grid-cols-[1.1fr_.9fr] lg:px-8 lg:pb-20 lg:pt-20">
+      <section className="relative isolate overflow-hidden bg-secondary text-secondary-foreground">
+        <div className="absolute inset-0 -z-10" aria-hidden="true">
+          <img src="/images/grill-hero.png" alt="" className="h-full w-full object-cover object-center" />
+          <div className="absolute inset-0 bg-gradient-to-r from-secondary via-secondary/95 to-secondary/75" />
+        </div>
+        <div className="relative mx-auto grid max-w-7xl gap-10 px-5 pb-14 pt-12 lg:grid-cols-[1.1fr_.9fr] lg:px-8 lg:pb-20 lg:pt-20">
           <div className="relative z-10 max-w-2xl animate-rise-in">
             <p className="font-mono-app text-[11px] uppercase tracking-[.22em] text-accent">Local food, close to home</p>
             <h1 className="mt-5 font-display text-5xl font-bold leading-[.96] tracking-[-.04em] sm:text-7xl">Your side of town, <span className="text-primary">on a plate.</span></h1>

@@ -11,20 +11,35 @@ import type { OrderReceiptOrderStatus } from './orderReceiptOrderStatus';
 import type { OrderReceiptPaymentStatus } from './orderReceiptPaymentStatus';
 
 export interface OrderReceipt {
+  /** Opaque public receipt token; never the database primary key */
   id: string;
-  vendorId: string;
+  /**
+     * @nullable
+     * @pattern ^PIT-[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{5}$
+     */
+  orderNumber: string | null;
+  /**
+     * @nullable
+     * @pattern ^\d{4}$
+     */
+  pickupCode: string | null;
   vendorName: string;
   pickupAddress: string;
   customerName: string;
   items: OrderLine[];
   orderTotalCents: number;
+  /** PlaceIT's 15% commission amount, retained for API compatibility. */
   bookingFeeCents: number;
   commissionRateBps: OrderReceiptCommissionRateBps;
   commissionAmountCents: number;
+  /** Always zero when PayFast full-payment split is active. */
   dueAtCollectionCents: number;
   paymentStatus: OrderReceiptPaymentStatus;
   orderStatus: OrderReceiptOrderStatus;
-  /** @nullable */
+  /**
+     * PayFast checkout redirect URL, when payment configuration is complete.
+     * @nullable
+     */
   checkoutUrl?: string | null;
   createdAt: Date;
 }

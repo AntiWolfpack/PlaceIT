@@ -1,6 +1,6 @@
 import { type ReactNode, createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'wouter';
-import { ArrowRight, CircleUserRound, MapPin, ShoppingBag, Store, X } from 'lucide-react';
+import { ArrowRight, CircleUserRound, MapPin, ShoppingBag, Store, Utensils, X } from 'lucide-react';
 import type { MenuItem, Vendor } from '@workspace/api-client-react';
 import { AddItemResult, CartState, formatRand, lineFromItem, readCart, saveCart } from '@/lib/placeit';
 
@@ -82,6 +82,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     { href: '/', label: 'Discover', icon: MapPin },
     { href: '/orders', label: 'My orders', icon: ShoppingBag },
     { href: '/profile', label: 'Profile', icon: CircleUserRound },
+    { href: '/vendor/orders', label: 'For vendors', icon: Utensils },
   ];
   return (
     <div className="grain min-h-[100dvh] bg-background">

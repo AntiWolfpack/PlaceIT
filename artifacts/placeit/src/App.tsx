@@ -10,6 +10,7 @@ import Checkout from '@/pages/checkout';
 import Orders from '@/pages/orders';
 import OrderDetail from '@/pages/order-detail';
 import Profile from '@/pages/profile';
+import VendorOrders from '@/pages/vendor-orders';
 import { AppShell, CartProvider } from '@/components/placeit-shell';
 import {
   Route,
@@ -32,6 +33,7 @@ function Router() {
           <Route path="/checkout" component={Checkout} />
           <Route path="/orders" component={Orders} />
           <Route path="/orders/:orderId" component={OrderDetail} />
+          <Route path="/vendor/orders" component={VendorOrders} />
           <Route path="/profile" component={Profile} />
           <Route component={NotFound} />
         </Switch>

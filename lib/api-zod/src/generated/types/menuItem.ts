@@ -8,7 +8,7 @@
 
 export interface MenuItem {
   id: string;
-  vendorId: string;
+  vendorId?: string;
   name: string;
   description: string;
   category: string;

@@ -12,8 +12,10 @@ export type OrderReceiptOrderStatus = typeof OrderReceiptOrderStatus[keyof typeo
 export const OrderReceiptOrderStatus = {
   awaiting_payment: 'awaiting_payment',
   placed: 'placed',
+  accepted: 'accepted',
   preparing: 'preparing',
   ready: 'ready',
-  collected: 'collected',
+  completed: 'completed',
   cancelled: 'cancelled',
+  refunded: 'refunded',
 } as const;

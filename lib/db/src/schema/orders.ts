@@ -1,15 +1,21 @@
 import { createInsertSchema } from "drizzle-zod";
-import { integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { integer, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { z } from "zod/v4";
 import { menuItemsTable } from "./menu-items";
 import { vendorsTable } from "./vendors";
 
 export const ordersTable = pgTable("orders", {
     id: uuid("id").defaultRandom().primaryKey(),
+    publicToken: uuid("public_token").defaultRandom().notNull(),
+    orderNumber: text("order_number"),
+    pickupCodeHash: text("pickup_code_hash"),
+    pickupCodeEncrypted: text("pickup_code_encrypted"),
+    pickupCodeAttempts: integer("pickup_code_attempts").notNull().default(0),
     vendorId: uuid("vendor_id")
       .notNull()
       .references(() => vendorsTable.id, { onDelete: "restrict" }),
     customerName: text("customer_name").notNull(),
+    customerEmail: text("customer_email"),
     customerPhone: text("customer_phone").notNull(),
     collectionNote: text("collection_note"),
     orderTotalCents: integer("order_total_cents").notNull(),
@@ -19,13 +25,16 @@ export const ordersTable = pgTable("orders", {
     dueAtCollectionCents: integer("due_at_collection_cents").notNull(),
     paymentStatus: text("payment_status").notNull().default("pending"),
     orderStatus: text("order_status").notNull().default("awaiting_payment"),
-    // Kept for compatibility with any earlier pending Stripe records.
-    stripeCheckoutSessionId: text("stripe_checkout_session_id"),
     payfastPaymentId: text("payfast_payment_id"),
     payfastTransactionId: text("payfast_transaction_id"),
     checkoutUrl: text("checkout_url"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+  },
+  (table) => ({
+    publicTokenUnique: uniqueIndex("orders_public_token_unique").on(table.publicToken),
+    orderNumberUnique: uniqueIndex("orders_order_number_unique").on(table.orderNumber),
+  }),
+);
 
 export const orderItemsTable = pgTable(
   "order_items",
